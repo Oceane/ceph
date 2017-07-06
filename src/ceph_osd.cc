@@ -245,6 +245,7 @@ int main(int argc, const char **argv)
       ::close(fd);
     }
   }
+  cout << "This is the data gotten by OSD# " << whoami << " " <<g_conf->osd_data << std::endl;
   ObjectStore *store = ObjectStore::create(g_ceph_context,
 					   store_type,
 					   g_conf->osd_data,
