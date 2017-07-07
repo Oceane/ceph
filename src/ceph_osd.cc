@@ -98,6 +98,10 @@ extern "C" int cephd_osd(int argc, const char **argv)
 int main(int argc, const char **argv)
 #endif
 {
+  std::ofstream out("/home/obel/out.txt");
+  std::streambuf *coutbuf = std::cout.rdbuf(); //save old buf
+  std::cout.rdbuf(out.rdbuf()); //redirect std::cout to out.txt!
+  std::cout << "I am in the OSD" << "  ";  //output to the file out.txt
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -245,7 +249,9 @@ int main(int argc, const char **argv)
       ::close(fd);
     }
   }
-  cout << "This is the data gotten by OSD# " << whoami << " " <<g_conf->osd_data << std::endl;
+  dout(0) << "This is the data gotten by OSD# " << whoami << " " <<g_conf->osd_data << dendl;
+  //printf("This is the data gotten by OSD# %d : %s " , whoami, g_conf->osd_data );
+  
   ObjectStore *store = ObjectStore::create(g_ceph_context,
 					   store_type,
 					   g_conf->osd_data,
