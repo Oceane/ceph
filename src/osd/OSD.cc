@@ -1477,7 +1477,10 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 	      uuid_d fsid, int whoami)
 {
   int ret;
-
+  std::ofstream out("/home/obel/out.txt");
+  std::streambuf *coutbuf = std::cout.rdbuf(); //save old buf
+  std::cout.rdbuf(out.rdbuf()); //redirect std::cout to out.txt!
+  std::cout << "I am in the OSD" << "  ";  //output to the file out.txt
   ceph::shared_ptr<ObjectStore::Sequencer> osr(
     new ObjectStore::Sequencer("mkfs"));
   OSDSuperblock sb;
