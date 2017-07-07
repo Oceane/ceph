@@ -1477,10 +1477,8 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 	      uuid_d fsid, int whoami)
 {
   int ret;
-  std::ofstream out("/home/obel/out.txt");
-  std::streambuf *coutbuf = std::cout.rdbuf(); //save old buf
-  std::cout.rdbuf(out.rdbuf()); //redirect std::cout to out.txt!
-  std::cout << "I am in the OSD" << "  ";  //output to the file out.txt
+  
+  
   ceph::shared_ptr<ObjectStore::Sequencer> osr(
     new ObjectStore::Sequencer("mkfs"));
   OSDSuperblock sb;
@@ -1644,6 +1642,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
 	 Messenger *osdc_messenger,
 	 MonClient *mc,
 	 const std::string &dev, const std::string &jdev) :
+	 
   Dispatcher(cct_),
   osd_lock("OSD::osd_lock"),
   tick_timer(cct, osd_lock),
@@ -4890,6 +4889,7 @@ void OSD::ms_handle_fast_accept(Connection *con)
 bool OSD::ms_handle_reset(Connection *con)
 {
   OSD::Session *session = (OSD::Session *)con->get_priv();
+  dout(1) << "I am reseting the meta data" << dendl;
   dout(1) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
