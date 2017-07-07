@@ -4889,7 +4889,7 @@ void OSD::ms_handle_fast_accept(Connection *con)
 bool OSD::ms_handle_reset(Connection *con)
 {
   OSD::Session *session = (OSD::Session *)con->get_priv();
-  dout(1) << "I am reseting the meta data" << dendl;
+  dout(1) << "I am reseting the meta data" << dendl; //some change
   dout(1) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
