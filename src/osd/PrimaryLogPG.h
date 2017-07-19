@@ -17,6 +17,8 @@
 #ifndef CEPH_REPLICATEDPG_H
 #define CEPH_REPLICATEDPG_H
 
+
+#include "/home/obel/gferasure/src/gf_erasure.h"
 #include <boost/tuple/tuple.hpp>
 #include "include/assert.h" 
 #include "PG.h"
@@ -26,6 +28,8 @@
 #include "common/sharedptr_registry.hpp"
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
+//#include "gf_w.h"
+//#include "../../../gferasure/src/gf_erasure.h"
 
 class MOSDSubOpReply;
 
@@ -1341,7 +1345,7 @@ public:
     bufferlist& odata,
     ConnectionRef conn,
     ceph_tid_t tid) override;
-
+  
   void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle) override;

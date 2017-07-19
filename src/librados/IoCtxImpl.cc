@@ -11,7 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
-
+#include "acconfig.h"
 #include <limits.h>
 
 #include "IoCtxImpl.h"
@@ -20,6 +20,7 @@
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
 #include "include/assert.h"
+#include <sys/stat.h>
 #include "common/valgrind.h"
 
 #define dout_subsys ceph_subsys_rados
@@ -187,6 +188,8 @@ struct C_aio_notify_Ack : public Context {
 } // anonymous namespace
 } // namespace librados
 
+
+
 librados::IoCtxImpl::IoCtxImpl() :
   ref_cnt(0), client(NULL), poolid(0), assert_ver(0), last_objver(0),
   notify_timeout(30), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
@@ -202,6 +205,7 @@ librados::IoCtxImpl::IoCtxImpl(RadosClient *c, Objecter *objecter,
     oloc(poolid), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
     aio_write_seq(0), objecter(objecter)
 {
+	ldout(c->cct, 3) << "Initializing IO context" << dendl;
 }
 
 void librados::IoCtxImpl::set_snap_read(snapid_t s)
@@ -632,6 +636,7 @@ int librados::IoCtxImpl::write_full(const object_t& oid, bufferlist& bl)
     return -E2BIG;
   ::ObjectOperation op;
   prepare_assert_ops(&op);
+  ldout(client->cct, 1) << "the data that needs to be sent" << dendl;
   op.write_full(bl);
   return operate(oid, &op, NULL);
 }

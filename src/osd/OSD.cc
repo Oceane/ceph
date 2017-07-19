@@ -278,6 +278,9 @@ OSDService::OSDService(OSD *osd) :
   , pgid_lock("OSDService::pgid_lock")
 #endif
 {
+  key = osd->key_array;
+  dout(10) << "//////////////////////////Key is: " << key << dendl;
+  dout(1) << "Initializing objecter" << dendl;
   objecter->init();
 }
 
@@ -788,8 +791,10 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
   dout(20) << "update_osd_stat " << osd_stat << dendl;
 }
 
+//WHAT THE HECK!
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
 {
+  //dout(10) << "preparing to send messages to the cluster" << dendl;
   OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
   assert(from_epoch <= next_map->get_epoch());
@@ -1025,6 +1030,9 @@ void OSDService::share_map(
   }
 }
 
+OSDMapRef OSDService::getOSDmap(){
+	return get_osdmap();
+}
 
 void OSDService::share_map_peer(int peer, Connection *con, OSDMapRef map)
 {
@@ -1629,7 +1637,7 @@ int OSD::peek_meta(ObjectStore *store, std::string& magic,
 
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
-
+#include "/home/obel/inkpackdir/secret_split_and_rebuild.h"
 // cons/des
 
 OSD::OSD(CephContext *cct_, ObjectStore *store_,
@@ -1725,6 +1733,24 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     &disk_tp),
   service(this)
 {
+  if(need_init){
+	gf_random_fill(key_array, key_size);
+	need_init = false;
+  }
+  /*secret_split_and_rebuild* SSR = new secret_split_and_rebuild();
+	
+  //16 way data split
+  int num_random = 2;
+	
+  //can survive 17 failures
+  int ecc = 3;
+	
+  //total size of the parity + data array
+  const int RE = ecc + num_random+1;
+  unsigned char* key = key_array;
+  string shares_to_send_to_system[RE-1];
+  SSR->secret_split_data( key, key_size,RE, num_random, ecc, shares_to_send_to_system);*/
+  
   monc->set_messenger(client_messenger);
   op_tracker.set_complaint_and_threshold(cct->_conf->osd_op_complaint_time,
                                          cct->_conf->osd_op_log_threshold);
@@ -4889,7 +4915,7 @@ void OSD::ms_handle_fast_accept(Connection *con)
 bool OSD::ms_handle_reset(Connection *con)
 {
   OSD::Session *session = (OSD::Session *)con->get_priv();
-  dout(1) << "I am reseting the meta data" << dendl;
+  dout(1) << "I am reseting the meta data" << dendl; //some change
   dout(1) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
@@ -5516,7 +5542,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   stringstream ss, ds;
   string rs;
   bufferlist odata;
-
+  dout(1) << "The data received by OSD# " << whoami << ": " << data << dendl;
   dout(20) << "do_command tid " << tid << " " << cmd << dendl;
 
   map<string, cmd_vartype> cmdmap;
@@ -5780,6 +5806,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       hobject_t soid(sobject_t(oid, 0));
       ObjectStore::Transaction t;
       t.write(coll_t::meta(), ghobject_t(soid), offset, bsize, bl);
+	  
       store->queue_transaction(osr.get(), std::move(t), NULL);
       if (!onum || !osize)
 	cleanupt.remove(coll_t::meta(), ghobject_t(soid));

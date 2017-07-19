@@ -66,6 +66,7 @@ ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& journal,
 			         osflagbits_t flags)
 {
+  lgeneric_dout(cct, 0)<< __func__ << "Oject store has " << data << dendl;
   if (type == "filestore") {
     return new FileStore(data, journal, flags);
   }

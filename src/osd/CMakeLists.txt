@@ -22,6 +22,10 @@ set(osd_srcs
   osd_types.cc
   ECUtil.cc
   ExtentCache.cc
+  /home/obel/inkpackdir/secret_split_and_rebuild.h
+  /home/obel/inkpackdir/secret_split_and_rebuild.cpp
+  /home/obel/inkpackdir/encryption.h
+  /home/obel/inkpackdir/encryption.cpp
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${osdc_osd_srcs})
 if(HAS_VTA)
@@ -34,7 +38,11 @@ add_library(osd STATIC ${osd_srcs}
   $<TARGET_OBJECTS:global_common_objs>
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:common_util_obj>)
+target_link_libraries(osd /home/obel/inkpackdir/intel_aes_lib/lib/x64/intel_aes64.a)
 target_link_libraries(osd ${LEVELDB_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+#FIND_FILE(gferasure libgferasure.so ./home/obel/gferasure/src/)
+#secret_split_and_rebuild encryption
+target_link_libraries(osd /home/obel/gferasure/src/libgferasure.so)
 if(WITH_LTTNG)
   add_dependencies(osd oprequest-tp osd-tp pg-tp)
 endif()

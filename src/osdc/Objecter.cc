@@ -11,7 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
-
+#include "acconfig.h"
 #include "Objecter.h"
 #include "osd/OSDMap.h"
 #include "Filer.h"
@@ -42,6 +42,7 @@
 #include "messages/MWatchNotify.h"
 
 #include <errno.h>
+#include <sys/stat.h>
 
 #include "common/config.h"
 #include "common/perf_counters.h"
@@ -1202,6 +1203,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  skipped_map = true;
 	  continue;
 	}
+	ldout(cct, 3) << "Right before changing the logger " << dendl;
 	logger->set(l_osdc_map_epoch, osdmap->get_epoch());
 
 	cluster_full = cluster_full || _osdmap_full_flag();
@@ -1266,6 +1268,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   // resend requests
   for (map<ceph_tid_t, Op*>::iterator p = need_resend.begin();
        p != need_resend.end(); ++p) {
+	ldout(cct, 3) << "In the for loop" << dendl;
     Op *op = p->second;
     OSDSession *s = op->session;
     bool mapped_session = false;
@@ -2182,7 +2185,9 @@ void Objecter::_op_submit_with_budget(Op *op, shunique_lock& sul,
   assert(op->ops.size() == op->out_bl.size());
   assert(op->ops.size() == op->out_rval.size());
   assert(op->ops.size() == op->out_handler.size());
-
+ 
+ ldout(cct, 3) << "In _op_submit_with_budget " << dendl;
+ 
   // throttle.  before we look at any state, because
   // _take_op_budget() may drop our lock while it blocks.
   if (!op->ctx_budgeted || (ctx_budget && (*ctx_budget == -1))) {
@@ -2209,7 +2214,7 @@ void Objecter::_op_submit_with_budget(Op *op, shunique_lock& sul,
 void Objecter::_send_op_account(Op *op)
 {
   inflight_ops.inc();
-
+  ldout(cct, 20) << " _send_op_account " << dendl;
   // add to gather set(s)
   if (op->onack) {
     num_unacked.inc();
@@ -2289,8 +2294,7 @@ void Objecter::_send_op_account(Op *op)
 void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 {
   // rwlock is locked
-
-  ldout(cct, 10) << __func__ << " op " << op << dendl;
+  ldout(cct, 3) << __func__ << " op and op " << op << dendl;
 
   // pick target
   assert(op->session == NULL);
@@ -2863,7 +2867,7 @@ void Objecter::_session_op_assign(OSDSession *to, Op *op)
     num_homeless_ops.inc();
   }
 
-  ldout(cct, 15) << __func__ << " " << to->osd << " " << op->tid << dendl;
+  ldout(cct, 15) << __func__ << " " << to->osd << " HELLO " << op->tid << dendl;
 }
 
 void Objecter::_session_op_remove(OSDSession *from, Op *op)
@@ -3041,7 +3045,7 @@ void Objecter::finish_op(OSDSession *session, ceph_tid_t tid)
 MOSDOp *Objecter::_prepare_osd_op(Op *op)
 {
   // rwlock is locked
-
+  ldout(cct, 15) << "_prepare_osd_op "<< dendl;
   int flags = op->target.flags;
   flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
   if (op->oncommit || op->oncommit_sync)
@@ -3123,6 +3127,7 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
   m->set_tid(op->tid);
 
   op->session->con->send_message(m);
+  ldout(cct, 3) << " this is the message that I am sending " << m << dendl;
 }
 
 int Objecter::calc_op_budget(Op *op)

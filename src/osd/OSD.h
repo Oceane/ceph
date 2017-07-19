@@ -15,6 +15,7 @@
 #ifndef CEPH_OSD_H
 #define CEPH_OSD_H
 
+
 #include "PG.h"
 
 #include "msg/Dispatcher.h"
@@ -424,6 +425,8 @@ public:
 class OSDService {
 public:
   OSD *osd;
+  int key_size = 32;
+  unsigned char* key;
   CephContext *cct;
   SharedPtrRegistry<spg_t, ObjectStore::Sequencer> osr_registry;
   ceph::shared_ptr<ObjectStore::Sequencer> meta_osr;
@@ -447,7 +450,7 @@ public:
   ClassHandler  *&class_handler;
 
   void dequeue_pg(PG *pg, list<OpRequestRef> *dequeued);
-
+  OSDMapRef getOSDmap();
 private:
   // -- map epoch lower bound --
   Mutex pg_epoch_lock;
@@ -1365,7 +1368,10 @@ public:
   }
 
 private:
-
+  int key_size = 32;
+  uint8_t* key_array = new uint8_t[key_size];
+  
+  bool need_init = true;
   ThreadPool osd_tp;
   ShardedThreadPool osd_op_tp;
   ThreadPool disk_tp;

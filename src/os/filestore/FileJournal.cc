@@ -941,7 +941,11 @@ int FileJournal::prepare_single_write(write_item &next_write, bufferlist& bl, of
   uint64_t seq = next_write.seq;
   bufferlist &ebl = next_write.bl;
   off64_t size = ebl.length();
-
+  
+  string read_string;
+  ebl.copy(0, ebl.length(), read_string);
+  
+  //dout(15) << "We will write the following data " << read_string << dendl;
   int r = check_for_full(seq, queue_pos, size);
   if (r < 0)
     return r;   // ENOSPC or EAGAIN
@@ -1263,7 +1267,13 @@ void FileJournal::write_thread_entry()
       logger->inc(l_filestore_journal_wr);
       logger->inc(l_filestore_journal_wr_bytes, bl.length());
     }
-
+	
+	string read_entry;
+	bl.copy(0, bl.length(),read_entry);
+	
+	dout(20) << "Going to write the following data: " << read_entry << dendl;
+	
+	
 #ifdef HAVE_LIBAIO
     if (aio)
       do_aio_write(bl);
@@ -1536,6 +1546,11 @@ int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist
   dout(10) << "prepare_entry " << tls << dendl;
   int data_len = g_conf->journal_align_min_size - 1;
   int data_align = -1; // -1 indicates that we don't care about the alignment
+  string read_string;
+  if(tbl->length()>0){
+	tbl->copy(0, tbl->length(), read_string);
+  }
+  dout(10) << "This is the read_string: " << read_string << dendl;
   bufferlist bl;
   for (vector<ObjectStore::Transaction>::iterator p = tls.begin();
       p != tls.end(); ++p) {
@@ -1976,6 +1991,7 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   ostream *ss,
   entry_header_t *_h) const
 {
+	dout(25) << "Reading the data" << dendl;
   off64_t cur_pos = init_pos;
   bufferlist _bl;
   if (!bl)

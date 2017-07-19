@@ -15,6 +15,7 @@
  * 
  */
 
+
 #include "boost/tuple/tuple.hpp"
 #include "boost/intrusive_ptr.hpp"
 #include "PG.h"
@@ -48,6 +49,8 @@
 #include "json_spirit/json_spirit_reader.h"
 #include "include/assert.h"  // json_spirit clobbers it
 #include "include/rados/rados_types.hpp"
+#include "librados/IoCtxImpl.h"
+
 
 #ifdef WITH_LTTNG
 #include "tracing/osd.h"
@@ -59,6 +62,7 @@
 #define DOUT_PREFIX_ARGS this, osd->whoami, get_osdmap()
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
+
 template <typename T>
 static ostream& _prefix(std::ostream *_dout, T *pg) {
   return *_dout << pg->gen_prefix();
@@ -69,6 +73,25 @@ static ostream& _prefix(std::ostream *_dout, T *pg) {
 #include <utility>
 
 #include <errno.h>
+#include <include/rados/librados.hpp>
+#include <iostream>
+#include <string>
+#include <fstream>
+#include <cxxabi.h>
+#include <chrono>
+#include <algorithm>
+#include <cmath>
+#include <sstream>
+#include <typeinfo>
+#include <unistd.h>
+#include <pthread.h>
+#include "/home/obel/inkpackdir/encryption.h"
+#include "/home/obel/inkpackdir/secret_split_and_rebuild.h"
+#include "/home/obel/gferasure/src/gf_w.h"
+#include "/home/obel/gferasure/src/gf_erasure.h"
+
+using namespace std;
+
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PrimaryLogPG, replicatedpg, osd);
 
@@ -859,6 +882,7 @@ int PrimaryLogPG::do_command(
     f->dump_stream("snap_trimq") << snap_trimq;
     f->dump_unsigned("epoch", get_osdmap()->get_epoch());
     f->open_array_section("up");
+	dout(10)<< "The number of osd is equal to " << sizeof(up) <<dendl;
     for (vector<int>::iterator p = up.begin(); p != up.end(); ++p)
       f->dump_unsigned("osd", *p);
     f->close_section();
@@ -4332,16 +4356,20 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
-
+  
   bool first_read = true;
-
+  //bool donewriting = true;
   PGTransaction* t = ctx->op_t.get();
 
   dout(10) << "do_osd_op " << soid << " " << ops << dendl;
+  
+  //dout(10) << "the req of the ops are " << ops.get_req() << dendl;
 
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p, ctx->current_osd_subop_num++) {
     OSDOp& osd_op = *p;
     ceph_osd_op& op = osd_op.op;
+	
+	dout(10) << "gggggggggggggggggggggggggggggg " << ceph_osd_op_name(op.op) << dendl;
 
     // TODO: check endianness (__le32 vs uint32_t, etc.)
     // The fields in ceph_osd_op are little-endian (according to the definition in rados.h),
@@ -4352,7 +4380,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     dout(10) << "do_osd_op  " << osd_op << dendl;
 
     bufferlist::iterator bp = osd_op.indata.begin();
+	
+	string beingRead;
+	osd_op.indata.copy(0,osd_op.indata.length(),beingRead);
 
+	dout(10) << "this is the data that is being read/written  " << beingRead << dendl;
+	
     // user-visible modifcation?
     switch (op.op) {
       // non user-visible modifications
@@ -4422,6 +4455,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	__u32 seq = oi.truncate_seq;
 	uint64_t size = oi.size;
 	tracepoint(osd, do_osd_op_pre_read, soid.oid.name.c_str(), soid.snap.val, size, seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
+	
 	bool trimmed_read = false;
 	// are we beyond truncate_size?
 	if ( (seq < op.extent.truncate_seq) &&
@@ -4438,7 +4472,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  op.extent.length = size - op.extent.offset;
 	  trimmed_read = true;
 	}
-
+	
 	// read into a buffer
 	bool async = false;
 	if (trimmed_read && op.extent.length == 0) {
@@ -4486,11 +4520,35 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      result = -EIO;
 	    }
 	  }
+	  string read_string;
+		osd_op.outdata.copy(0, osd_op.outdata.length(), read_string);
+		dout(10) << "The data that we are going to read is the following: " <<read_string << dendl;
+		//read_string = read_string.substr(1);
+		dout(10) << "READ::The key of this OSD is: " << osd->key << dendl;
+		unsigned char decrypted_text[read_string.length()];
+		unsigned char m2_Test[read_string.length()];
+		strcpy( (char*) m2_Test, read_string.c_str() );
+		
+		encryption* new_encryption = new encryption();
+		
+		new_encryption->aes_decrypt(new_encryption->USE_iAES, m2_Test, decrypted_text, osd->key, new_encryption->SIZE_32);
+		
+		
+		string decryptedmessage2((char*)decrypted_text);
+		
+		dout(10) << "The decrypted message is: " << decryptedmessage2 << dendl;
+		
+		librados::bufferlist newbl;
+		newbl.append(decryptedmessage2);
+		
+		osd_op.outdata = newbl;
 	}
 	if (first_read) {
 	  first_read = false;
 	  ctx->data_off = op.extent.offset;
 	}
+	
+	
 	// XXX the op.extent.length is the requested length for async read
 	// On error this length is changed to 0 after the error comes back.
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
@@ -5232,8 +5290,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 
-        if (seq && (seq > op.extent.truncate_seq) &&
-            (op.extent.offset + op.extent.length > oi.size)) {
+	if (seq && (seq > op.extent.truncate_seq) &&
+		(op.extent.offset + op.extent.length > oi.size)) {
 	  // old write, arrived after trimtrunc
 	  op.extent.length = (op.extent.offset > oi.size ? 0 : oi.size - op.extent.offset);
 	  dout(10) << " old truncate_seq " << op.extent.truncate_seq << " < current " << seq
@@ -5241,7 +5299,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  bufferlist t;
 	  t.substr_of(osd_op.indata, 0, op.extent.length);
 	  osd_op.indata.swap(t);
-        }
+	}
 	if (op.extent.truncate_seq > seq) {
 	  // write arrives before trimtrunc
 	  if (obs.exists && !oi.is_whiteout()) {
@@ -5295,8 +5353,115 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_WRITEFULL:
       ++ctx->num_write;
       { // write full object
+	
 	tracepoint(osd, do_osd_op_pre_writefull, soid.oid.name.c_str(), soid.snap.val, oi.size, 0, op.extent.length);
+	string write_string;
+	//if(donewriting == true){	
+	osd_op.indata.copy(0, osd_op.indata.length(), write_string);
+		/*for(int i = 0; i <osd_op.indata.length(); i++ ){
+			write_string += osd_op.indata[i];
+		}*/
+	//}
+	dout(10)<< "The first character is " << write_string[0] << dendl;
+	dout(10)<< "Got the following object: " << soid.oid.name.c_str() << dendl;
+	string encryptedmessage;
+	if(write_string[0] == '1'){
+		//donewriting = false;
+		//donewriting = false;
+		string write_string2 = " " + write_string.substr(1); //hmm
+		encryption* new_encryption = new encryption();
+		//dout(10) << "The data that we are going to write is the following: " <<write_string << dendl;
+		dout(10) << "This is the soid.oid.name.c_str(): " << soid.oid.name.c_str() << dendl;
+		//dout(10) << "The key of this OSD is: " << osd->key << dendl;
+		
+		unsigned char encrypted_text[write_string2.length()];
+		unsigned char m_Test[write_string2.length()];
+		strcpy( (char*) m_Test, write_string2.c_str() );
+		
+		new_encryption->aes_encrypt(new_encryption->USE_iAES, m_Test, encrypted_text, osd->key, new_encryption->SIZE_32);
+		string encryptedmessage2(encrypted_text,encrypted_text+sizeof(encrypted_text));
+		//encryptedmessage = encryptedmessage2;
+		//dout(1) << "The encrypted message is: " << encryptedmessage2 << dendl;
+		
+		secret_split_and_rebuild* SSR = new secret_split_and_rebuild();
+		
+		//16 way data split
+		int num_random = 8;
+		
+		//can survive 17 failures
+		int ecc = 9;
+		
+		//total size of the parity + data array
+		const int RE = ecc + num_random + 1;
+		string shares_to_send_to_system[RE-1];
+		//secret split here!
+		SSR->secret_split_data( osd->key, osd->key_size,RE, num_random, ecc, shares_to_send_to_system);
+	    bool flag = false;	 //used to ensure writes to the system
+		
+		// Start of the problematic for loop
+		for(int i = 0; i < RE-1; i++){
+			while(flag == true)
+			{
+				usleep(1); // one second delay
+			}
+			
+			flag = true; //Okay to write
+			string obj = soid.oid.name.c_str(); //The actual data name e.g. 3532601092348
+			obj = obj + "------------" + to_string(i); //this is the name of the object that will ID the share
+			
+			librados::bufferlist bl;
+			bl.append(shares_to_send_to_system[i]); //no race condition for the share array
+			::ObjectOperation op_new;
+			
+			op_new.write_full(bl); //write operation
+				
+			if (!(!op_new.size())){ //as long as the op has data
+				ceph::real_time ut = (ceph::real_clock::now(cct));
 
+				Mutex mylock("IoCtxImpl::operate::mylock");
+				Cond cond;
+				bool done;
+				int r;
+				version_t ver;
+	
+				Context *oncommit = new C_SafeCond(&mylock, &cond, &done, &r);
+
+				//int op_ = op_new.ops[0].op.op;
+				const object_t oid_new = obj;
+				//info.pgid.pool()
+				const object_locator_t oloc_new(get_pgid().pool(),obj);//ctx->new_temp_oid);
+				//const SnapContext snapc_new =  ctx->snapc;//SnapContext
+				const vector<snapid_t> v;
+				const SnapContext snapc_new = SnapContext(ctx->snapc);//op_new.ops[0].soid.snap, v);
+			  
+				Objecter::Op *objecter_op = osd->objecter->prepare_mutate_op(oid_new, oloc_new,
+												op_new, snapc_new, ut, op_new.ops[0].op.flags,
+												NULL, oncommit, &ver);
+				
+				dout(10)<<"The target OSD is: " << oloc_new << dendl;	
+				//sleep(0.5);
+				osd->objecter->op_submit(objecter_op);
+				//usleep(1);
+			    
+				flag = false;
+	
+				//dout(10) << "Objecter returned from "<< ceph_osd_op_name(op_) << " r=" << r << dendl;
+			} 
+			
+		}
+		
+		//donewriting = true;	
+		//if (write_string[0] == '1'&& donewriting == true){
+			//encryptedmessage2 = '0'+encryptedmessage2;
+			dout(10) << "Writting the following data tatatata: " << encryptedmessage2 << dendl; 
+			librados::bufferlist newbl;
+			newbl.append(encryptedmessage2);
+			osd_op.indata = newbl;
+		//}
+		//dout(10) << "This is the length of the bufferlist " << osd_op.indata.length()<< dendl;
+		
+	}
+	
 	if (op.extent.length != osd_op.indata.length()) {
 	  result = -EINVAL;
 	  break;
@@ -5314,14 +5479,25 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else if (obs.exists && op.extent.length < oi.size) {
 	  t->truncate(soid, op.extent.length);
 	}
+	
+		
 	if (op.extent.length) {
-	  t->write(soid, 0, op.extent.length, osd_op.indata, op.flags);
+	 /* string temp_str;
+	  osd_op.indata.copy(0, osd_op.indata.length(), temp_str);
+	  dout(10) << "WE ARE WRITING THE FOLLOWING STRING: " << temp_str << dendl;
+	  if(temp_str[0] == '0' || (temp_str[0] == encryptedmessage[0])){	*/	  
+		dout(10) <<  "with id " << soid.oid.name.c_str()<< dendl;
+		t->write(soid, 0, op.extent.length, osd_op.indata, op.flags); //Write operation
+	  //}
+	  
 	}
+	
 	obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
 
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
-	    0, op.extent.length, true, op.extent.length != oi.size ? true : false);
-      }
+	    0, op.extent.length, true, op.extent.length != oi.size ? true : false); //another write operation
+      
+	}
       break;
 
     case CEPH_OSD_OP_WRITESAME:
